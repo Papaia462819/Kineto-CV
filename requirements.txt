@@ -1,0 +1,15 @@
+dtaidistance==2.5.1
+jupyter==1.1.1
+matplotlib==3.11.2
+mediapipe==1.0.1
+numpy==2.5.3
+opencv-contrib-python==5.0.0.93
+openpyxl==3.1.5
+pandas==3.0.6
+pingouin==0.7.0
+plotly==7.1.0
+PyYAML==6.0.3
+pytest==8.4.2
+scikit-learn==1.9.1
+scipy==1.18.1
+streamlit==1.65.0

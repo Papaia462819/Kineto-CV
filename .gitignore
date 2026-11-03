@@ -1,0 +1,19 @@
+# Mediul virtual
+.venv/
+
+# Date: dataset-uri, filmări cu oameni, keypoints, baza SQLite
+data/
+
+# Modele descărcate sau antrenate
+models/*
+
+# Python și Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Fișiere de sistem și editor
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
