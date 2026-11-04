@@ -26,9 +26,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 from src.features import PRIMARY_ANGLE, REP_PROMINENCE, compute_angles, named_joints
 from src.filters import OneEuroFilter, smooth_keypoints
+from src.kinect import load_kinect
 from src.quality import OK, QualityChecker, clean_sequence
 from src.reps import RepCounter, find_reps
-from test_pose_kimore import load_kinect
 
 INDEX = ROOT / "data" / "kimore" / "index.csv"
 KEYPOINTS = ROOT / "data" / "keypoints" / "kimore"

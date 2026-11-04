@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 from extract_keypoints import extract_video
+from src.kinect import load_kinect
 
 INDEX = ROOT / "data" / "kimore" / "index.csv"
 KEYPOINTS = ROOT / "data" / "keypoints" / "kimore"
@@ -45,26 +46,6 @@ def pick_videos(index):
         options = candidates[(candidates["group"] == group) & (candidates["exercise"] == exercise)]
         picks.append(options.sample(1, random_state=42).iloc[0])
     return pd.DataFrame(picks)
-
-
-def load_kinect(path):
-    """Rândurile goale (persoană nedetectată) devin NaN, ca să nu se decaleze numerotarea."""
-    frames = []
-    previous = None
-    for line in Path(path).read_text(errors="replace").split("\n"):
-        values = [v for v in line.strip().split(",") if v]
-        if not values:
-            frames.append(np.full((25, 3), np.nan))
-            continue
-        # Uneori Kinect vede mai multe corpuri pe același rând; păstrăm corpul cel mai apropiat de cadrul anterior.
-        bodies = np.array(values, dtype=float).reshape(-1, 25, 4)[:, :, :3]
-        reference = previous if previous is not None else np.array([0.0, 0.0, 0.0])
-        body = bodies[np.argmin(np.linalg.norm(bodies[:, 0] - reference, axis=1))]
-        previous = body[0]
-        frames.append(body)
-    while frames and np.isnan(frames[-1]).all():
-        frames.pop()
-    return np.stack(frames)
 
 
 def joints(points, mapping):
