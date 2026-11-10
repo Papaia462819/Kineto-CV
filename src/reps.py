@@ -118,3 +118,15 @@ class RepCounter:
         self._top = (None, -np.inf)
         self._valid = 1
         return rep
+
+
+def valleys(signal, reps):
+    """Valea fiecărei repetări: minimul dintre vârful anterior și vârful următor, nu doar din fereastra repetării."""
+    values = np.asarray(signal, dtype=float)
+    peaks = [r.peak for r in reps]
+    out = []
+    for k, peak in enumerate(peaks):
+        left = peaks[k - 1] if k else max(0, reps[k].start - (reps[k].end - reps[k].start))
+        right = peaks[k + 1] if k + 1 < len(peaks) else min(len(values) - 1, reps[k].end + (reps[k].end - reps[k].start))
+        out.append(float(np.nanmin(values[left:right + 1])))
+    return np.array(out)
