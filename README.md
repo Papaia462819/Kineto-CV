@@ -24,6 +24,7 @@ camera / video → MediaPipe (33 de puncte) → verificare → netezire → ungh
 | `src/clinical_score.py` | modelul de scor clinic |
 | `src/session.py` | o execuție în aplicație: urmărirea live și analiza de la final, cu scorul |
 | `scripts/app.py` | aplicația pe laptop: camera sau video, repetările live, scorul la final |
+| `src/feedback.py` | feedback-ul live: reguli pe unghiuri și poziții (regulile și pragurile: `config/feedback.json`) |
 | `src/storage.py` | baza de date SQLite: pacienți, plan, sesiuni, recenziile medicului, mesaje |
 | `src/api.py` | serverul pentru telefon (FastAPI): primește punctele, rulează analiza, păstrează datele |
 | `android/` | aplicația Android (Kotlin): MediaPipe și partea live pe telefon, scorul de la server |
@@ -85,6 +86,8 @@ python scripts/build_execution_features.py    # tabelele pentru recunoașterea e
 python scripts/train_exercise_classifier.py
 python scripts/build_score_features.py        # tabelele pentru scorul clinic
 python scripts/train_clinical_score.py
+python scripts/calibrate_feedback.py          # pragurile regulilor de feedback live → config/feedback.json
+python scripts/export_android_fixtures.py     # datele pentru testele Kotlin (după orice schimbare în codul live)
 ```
 
 ## Date

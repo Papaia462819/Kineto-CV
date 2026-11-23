@@ -55,9 +55,11 @@ def test_unknown_patient_is_404(client):
 
 def test_upload_analyzes_and_stores_session(client):
     pid = add_patient(client)
-    body = {"exercise": 1, "device": "test", "frames": [frame(0.0), frame(0.04, present=False), frame(0.08)]}
+    body = {"exercise": 1, "device": "test", "feedback": {"Ține coatele întinse.": 2},
+            "frames": [frame(0.0), frame(0.04, present=False), frame(0.08)]}
     session = client.post(f"/api/patients/{pid}/sessions", json=body).json()
     assert session["score"] == 41.5 and session["reps"] == 3 and session["warnings"] == []
+    assert session["feedback"] == {"Ține coatele întinse.": 2}
     image_kp, _, times, exercise, mirrored = client.fake.calls[0]
     assert image_kp.shape == (3, 33, 4) and np.isnan(image_kp[1]).all() and not np.isnan(image_kp[0]).any()
     assert list(times) == [0.0, 0.04, 0.08] and exercise == 1 and mirrored is False

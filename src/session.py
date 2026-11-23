@@ -18,6 +18,7 @@ import pandas as pd
 from src.clinical_features import clinical_summary
 from src.execution_features import (FEATURE_NAMES, joints_from_mediapipe, repetition_summary, summarize,
                                     valid_seconds)
+from src.feedback import RULES_FILE, FeedbackEngine, RepTimes, frame_measures, load_rules
 from src.features import PRIMARY_ANGLE, REP_PROMINENCE, compute_angles, named_joints
 from src.filters import OneEuroFilter
 from src.quality import JUMP, LOW_VISIBILITY, MISSING, OK, QualityChecker
@@ -28,6 +29,10 @@ ANALYSIS_FPS = 30.0  # modelele au învățat pe KIMORE, filmat la 30 de cadre p
 MIN_VALID_S = 1.0  # ca la antrenare: sub o secundă de cadre complete nu dăm scor
 MIN_DURATION_S = 5.0
 LOW_KEPT = 0.5  # sub jumătate de cadre bune, eroarea pe KIMORE a crescut de la ~5,6 la ~7,3 puncte
+COUNTDOWN_S = 5.0  # numărătoarea de la start: persoana stă nemișcată, cadrele devin poziția de start
+# Unghiul principal al exercițiului (PRIMARY_ANGLE) printre măsurile regulilor (src/feedback.py).
+PRIMARY_MEASURE = {"shoulder_mean": "shoulder", "trunk_tilt": "tilt", "shoulder_rotation": "shoulder_rotation",
+                   "knee_flexion_mean": "knee"}
 CLASSIFIER_DOUBT = 0.6  # avertizăm doar dacă alt exercițiu e mult mai probabil
 
 STATUS_MESSAGES = {
@@ -77,18 +82,29 @@ class LiveState:
     angle: float  # unghiul principal al exercițiului, în grade (NaN dacă nu se vede)
     reps: int
     new_rep: object = None  # un Rep, când tocmai s-a încheiat o repetare
+    countdown: float | None = None  # secundele rămase din numărătoare (None după ea)
+    feedback: str | None = None  # un mesaj de spus acum (regulile din src/feedback.py)
 
 
 class LiveSession:
-    """Primește cadrele pe rând, dă starea live și păstrează punctele brute pentru analiza de la final."""
+    """Primește cadrele pe rând, dă starea live și păstrează punctele brute pentru analiza de la final.
 
-    def __init__(self, exercise, mirrored=False, fps=ANALYSIS_FPS):
+    Primele `countdown_s` secunde sunt numărătoarea: persoana stă nemișcată, iar cadrele bune devin poziția
+    de start pentru reguli. Repetările și regulile pornesc după ea. Punctele brute se înregistrează de la început.
+    """
+
+    def __init__(self, exercise, mirrored=False, fps=ANALYSIS_FPS, countdown_s=COUNTDOWN_S, rules_path=RULES_FILE):
         self.exercise = exercise
         self.mirrored = mirrored
         self.angle_name = PRIMARY_ANGLE[exercise]
+        self.countdown_s = countdown_s
         self._checker = QualityChecker(fps=fps, mirrored=mirrored)
         self._smoother = OneEuroFilter()
         self._counter = RepCounter(fps, prominence=REP_PROMINENCE[exercise])
+        self._counter_times = []  # timpul fiecărui cadru dat numărătorului (repetările vin ca indici)
+        settings, rules = load_rules(exercise, rules_path)
+        self.feedback = FeedbackEngine(rules, settings)
+        self._start_frames = []
         self._image, self._world, self._times = [], [], []
 
     def update(self, image_kp, world_kp, t):
@@ -98,12 +114,33 @@ class LiveSession:
         self._times.append(float(t))
 
         _, world, status = self._checker.update(image_kp, world_kp)
-        smooth = np.array(world)
-        smooth[:, :3] = self._smoother(world[:, :3], t)
-        angle = compute_angles(named_joints(smooth[None], "mediapipe", self.mirrored))[self.angle_name].iloc[0]
+        measures = None
+        if status == OK:
+            smooth = np.array(world)
+            smooth[:, :3] = self._smoother(world[:, :3], t)
+            values = frame_measures(named_joints(smooth[None], "mediapipe", self.mirrored))
+            measures = {name: float(v[0]) for name, v in values.items()}
+        else:
+            self._smoother.reset()
+        message = STATUS_MESSAGES.get(status, OTHER_STATUS_MESSAGE)
+
+        remaining = self.countdown_s - (t - self._times[0])
+        if remaining > 0:
+            if measures is not None:
+                self._start_frames.append(measures)
+            return LiveState(status, message, np.nan, 0, countdown=remaining)
+        if self.feedback.baseline is None:
+            self.feedback.set_baseline(self._start_frames)
+
+        angle = measures[PRIMARY_MEASURE[self.angle_name]] if measures is not None else np.nan
+        self._counter_times.append(float(t))
         rep = self._counter.update(angle)
-        return LiveState(status, STATUS_MESSAGES.get(status, OTHER_STATUS_MESSAGE), float(angle),
-                         self._counter.count, rep)
+        rep_times = None
+        if rep is not None:
+            times = self._counter_times
+            rep_times = RepTimes(times[rep.start], times[rep.peak], times[rep.end], rep.amplitude)
+        said = self.feedback.update(float(t), measures, rep_times)
+        return LiveState(status, message, float(angle), self._counter.count, rep, feedback=said)
 
     @property
     def duration_s(self):
@@ -131,6 +168,7 @@ class ExecutionResult:
     looks_like: int | None  # exercițiul recunoscut din mișcare
     looks_like_p: float | None
     warnings: list = field(default_factory=list)
+    feedback: dict = field(default_factory=dict)  # {mesaj de corectare: de câte ori a fost spus live}
 
     def to_dict(self):
         return {k: (None if isinstance(v, float) and np.isnan(v) else v) for k, v in asdict(self).items()}

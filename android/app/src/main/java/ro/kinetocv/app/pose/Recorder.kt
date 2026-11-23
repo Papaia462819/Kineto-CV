@@ -34,12 +34,14 @@ class Recorder {
      * scrie mereu cu punct zecimal (String.format ar pune virgulă pe un telefon setat în română).
      */
     @Synchronized
-    fun toJson(exercise: Int, mirrored: Boolean, device: String): String {
+    fun toJson(exercise: Int, mirrored: Boolean, device: String, feedback: Map<String, Int> = emptyMap()): String {
         val out = StringBuilder(frames.size * 2400)
         out.append("{\"exercise\":").append(exercise)
             .append(",\"mirrored\":").append(mirrored)
-            .append(",\"device\":\"").append(device.replace("\\", "").replace("\"", "")).append("\"")
-            .append(",\"frames\":[")
+            .append(",\"device\":\"").append(clean(device)).append("\"")
+            .append(",\"feedback\":{")
+            .append(feedback.entries.joinToString(",") { (message, count) -> "\"${clean(message)}\":$count" })
+            .append("},\"frames\":[")
         frames.forEachIndexed { k, frame ->
             if (k > 0) out.append(',')
             out.append("{\"t\":").append(frame.t)
@@ -55,6 +57,9 @@ class Recorder {
         }
         return out.append("]}").toString()
     }
+
+    /** Textul pus între ghilimele în JSON: fără ghilimele, backslash sau caractere de control. */
+    private fun clean(text: String) = text.filter { it != '"' && it != '\\' && it >= ' ' }
 
     private fun appendArray(out: StringBuilder, values: FloatArray) {
         out.append('[')

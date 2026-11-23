@@ -1,0 +1,480 @@
+{
+  "settings": {
+    "hold_s": 0.7,
+    "repeat_s": 6.0,
+    "gap_s": 3.0
+  },
+  "general": [
+    {
+      "id": "idle",
+      "kind": "idle",
+      "threshold": 15.0,
+      "priority": 3,
+      "message": "Continuă exercițiul."
+    },
+    {
+      "id": "tired",
+      "kind": "fatigue",
+      "threshold": 0.6,
+      "priority": 3,
+      "message": "Dacă obosești, ia o pauză."
+    }
+  ],
+  "exercises": {
+    "1": [
+      {
+        "id": "arms_higher",
+        "kind": "rep",
+        "measure": "shoulder",
+        "stat": "peak",
+        "bad": "low",
+        "percentile": 5,
+        "priority": 3,
+        "message": "Ridică brațele mai sus, deasupra capului.",
+        "threshold": 144.53,
+        "calibrated_on": 248,
+        "fires_percent": {
+          "slab (<30)": 29,
+          "mediu": 0,
+          "bun (>=40)": 2
+        },
+        "enabled": true
+      },
+      {
+        "id": "elbows_straight",
+        "kind": "rep",
+        "measure": "elbow",
+        "stat": "peak",
+        "bad": "low",
+        "percentile": 5,
+        "priority": 2,
+        "message": "Ține coatele întinse.",
+        "threshold": 141.89,
+        "calibrated_on": 248,
+        "fires_percent": {
+          "slab (<30)": 43,
+          "mediu": 0,
+          "bun (>=40)": 7
+        },
+        "enabled": true
+      },
+      {
+        "id": "arms_even",
+        "kind": "rep",
+        "measure": "shoulder_diff",
+        "stat": "peak",
+        "bad": "high",
+        "percentile": 95,
+        "priority": 2,
+        "message": "Ridică ambele brațe la fel de sus.",
+        "threshold": 19.67,
+        "calibrated_on": 248,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 30,
+          "bun (>=40)": 5
+        },
+        "enabled": false
+      },
+      {
+        "id": "back_straight",
+        "kind": "hold",
+        "measure": "lean",
+        "relative": true,
+        "percentile": 95,
+        "priority": 1,
+        "message": "Ține spatele drept, nu te lăsa pe spate.",
+        "threshold": 76.61,
+        "calibrated_on": 42,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 0
+        },
+        "enabled": false
+      },
+      {
+        "id": "too_fast",
+        "kind": "too_fast",
+        "percentile": 5,
+        "max_threshold": 0.6,
+        "priority": 2,
+        "keep": true,
+        "message": "Mișcă-te mai încet, controlat.",
+        "threshold": 0.6,
+        "calibrated_on": 248,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 0
+        },
+        "enabled": true
+      }
+    ],
+    "2": [
+      {
+        "id": "tilt_more",
+        "kind": "rep",
+        "measure": "tilt",
+        "stat": "both_sides",
+        "relative": true,
+        "bad": "low",
+        "percentile": 5,
+        "priority": 3,
+        "message": "Înclină-te mai mult.",
+        "threshold": 7.3,
+        "calibrated_on": 116,
+        "fires_percent": {
+          "slab (<30)": 31,
+          "mediu": 0,
+          "bun (>=40)": 7
+        },
+        "enabled": true
+      },
+      {
+        "id": "tilt_even",
+        "kind": "rep",
+        "measure": "tilt",
+        "stat": "sides_diff",
+        "relative": true,
+        "bad": "high",
+        "percentile": 95,
+        "priority": 2,
+        "message": "Înclină-te la fel de mult în ambele părți.",
+        "threshold": 18.68,
+        "calibrated_on": 116,
+        "fires_percent": {
+          "slab (<30)": 8,
+          "mediu": 10,
+          "bun (>=40)": 3
+        },
+        "enabled": false
+      },
+      {
+        "id": "arms_up",
+        "kind": "rep",
+        "measure": "shoulder",
+        "stat": "min",
+        "bad": "low",
+        "percentile": 5,
+        "priority": 2,
+        "message": "Ține brațele sus.",
+        "threshold": 22.73,
+        "calibrated_on": 145,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 3
+        },
+        "enabled": false
+      },
+      {
+        "id": "hips_still",
+        "kind": "hold",
+        "measure": "pelvis_shift",
+        "relative": true,
+        "percentile": 95,
+        "priority": 1,
+        "message": "Ține șoldurile nemișcate.",
+        "threshold": 12.21,
+        "calibrated_on": 29,
+        "fires_percent": {
+          "slab (<30)": 23,
+          "mediu": 10,
+          "bun (>=40)": 3
+        },
+        "enabled": true
+      },
+      {
+        "id": "tilt_sideways",
+        "kind": "hold",
+        "measure": "lean",
+        "relative": true,
+        "percentile": 95,
+        "priority": 1,
+        "message": "Înclină-te lateral, nu în față.",
+        "threshold": 65.0,
+        "calibrated_on": 29,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 3
+        },
+        "enabled": false
+      },
+      {
+        "id": "too_fast",
+        "kind": "too_fast",
+        "percentile": 5,
+        "max_threshold": 0.6,
+        "priority": 2,
+        "keep": true,
+        "message": "Mișcă-te mai încet, controlat.",
+        "threshold": 0.6,
+        "calibrated_on": 145,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 0
+        },
+        "enabled": true
+      }
+    ],
+    "3": [
+      {
+        "id": "rotate_more",
+        "kind": "rep",
+        "measure": "shoulder_rotation",
+        "stat": "both_sides",
+        "relative": true,
+        "bad": "low",
+        "percentile": 5,
+        "priority": 3,
+        "message": "Rotește trunchiul mai mult.",
+        "threshold": 0.95,
+        "calibrated_on": 226,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 15,
+          "bun (>=40)": 3
+        },
+        "enabled": false
+      },
+      {
+        "id": "pelvis_still",
+        "kind": "hold",
+        "measure": "pelvis_rotation",
+        "relative": true,
+        "percentile": 95,
+        "priority": 1,
+        "message": "Rotește doar trunchiul, ține bazinul pe loc.",
+        "threshold": 94.86,
+        "calibrated_on": 34,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 0
+        },
+        "enabled": false
+      },
+      {
+        "id": "arms_shoulder_height",
+        "kind": "rep",
+        "measure": "wrist_height",
+        "stat": "min",
+        "bad": "low",
+        "percentile": 5,
+        "priority": 2,
+        "message": "Ține brațele la nivelul umerilor.",
+        "threshold": -25.34,
+        "calibrated_on": 260,
+        "fires_percent": {
+          "slab (<30)": 50,
+          "mediu": 23,
+          "bun (>=40)": 3
+        },
+        "enabled": true
+      },
+      {
+        "id": "arms_straight",
+        "kind": "rep",
+        "measure": "elbow",
+        "stat": "min",
+        "bad": "low",
+        "percentile": 5,
+        "priority": 2,
+        "message": "Ține brațele întinse.",
+        "threshold": 65.02,
+        "calibrated_on": 260,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 3
+        },
+        "enabled": false
+      },
+      {
+        "id": "too_fast",
+        "kind": "too_fast",
+        "percentile": 5,
+        "max_threshold": 0.6,
+        "priority": 2,
+        "keep": true,
+        "message": "Mișcă-te mai încet, controlat.",
+        "threshold": 0.17,
+        "calibrated_on": 260,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 8,
+          "bun (>=40)": 6
+        },
+        "enabled": true
+      }
+    ],
+    "4": [
+      {
+        "id": "pelvis_more",
+        "kind": "rep",
+        "measure": "pelvis_rotation",
+        "stat": "range",
+        "bad": "low",
+        "percentile": 5,
+        "priority": 3,
+        "message": "Rotește bazinul mai mult.",
+        "threshold": 1.37,
+        "calibrated_on": 265,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 8
+        },
+        "enabled": false
+      },
+      {
+        "id": "shoulders_still",
+        "kind": "hold",
+        "measure": "shoulder_rotation",
+        "relative": true,
+        "percentile": 95,
+        "priority": 1,
+        "message": "Ține umerii nemișcați, rotește doar bazinul.",
+        "threshold": 13.28,
+        "calibrated_on": 26,
+        "fires_percent": {
+          "slab (<30)": 46,
+          "mediu": 31,
+          "bun (>=40)": 8
+        },
+        "enabled": true
+      },
+      {
+        "id": "too_fast",
+        "kind": "too_fast",
+        "percentile": 5,
+        "max_threshold": 0.6,
+        "priority": 2,
+        "keep": true,
+        "message": "Mișcă-te mai încet, controlat.",
+        "threshold": 0.6,
+        "calibrated_on": 265,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 6,
+          "bun (>=40)": 0
+        },
+        "enabled": true
+      }
+    ],
+    "5": [
+      {
+        "id": "squat_deeper",
+        "kind": "rep",
+        "measure": "knee",
+        "stat": "peak",
+        "bad": "low",
+        "percentile": 5,
+        "priority": 3,
+        "keep": true,
+        "message": "Coboară puțin mai mult.",
+        "threshold": 32.16,
+        "calibrated_on": 168,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 0
+        },
+        "enabled": true
+      },
+      {
+        "id": "knees_even",
+        "kind": "rep",
+        "measure": "knee_diff",
+        "stat": "peak",
+        "bad": "high",
+        "percentile": 95,
+        "priority": 2,
+        "message": "Sprijină-te egal pe ambele picioare.",
+        "threshold": 18.32,
+        "calibrated_on": 168,
+        "fires_percent": {
+          "slab (<30)": 24,
+          "mediu": 8,
+          "bun (>=40)": 7
+        },
+        "enabled": true
+      },
+      {
+        "id": "knees_out",
+        "kind": "rep",
+        "measure": "knee_ratio",
+        "stat": "peak",
+        "bad": "low",
+        "percentile": 5,
+        "priority": 2,
+        "message": "Ține genunchii în dreptul picioarelor.",
+        "threshold": 0.9,
+        "calibrated_on": 168,
+        "fires_percent": {
+          "slab (<30)": 12,
+          "mediu": 8,
+          "bun (>=40)": 3
+        },
+        "enabled": false
+      },
+      {
+        "id": "arms_forward",
+        "kind": "rep",
+        "measure": "shoulder",
+        "stat": "min",
+        "bad": "low",
+        "percentile": 5,
+        "priority": 2,
+        "message": "Ține brațele întinse în față.",
+        "threshold": 13.93,
+        "calibrated_on": 168,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 8,
+          "bun (>=40)": 3
+        },
+        "enabled": false
+      },
+      {
+        "id": "back_upright",
+        "kind": "rep",
+        "measure": "lean",
+        "stat": "peak",
+        "relative": true,
+        "bad": "high",
+        "percentile": 95,
+        "priority": 1,
+        "message": "Ține spatele cât mai drept.",
+        "threshold": 27.79,
+        "calibrated_on": 168,
+        "fires_percent": {
+          "slab (<30)": 12,
+          "mediu": 15,
+          "bun (>=40)": 3
+        },
+        "enabled": false
+      },
+      {
+        "id": "too_fast",
+        "kind": "too_fast",
+        "percentile": 5,
+        "max_threshold": 0.6,
+        "priority": 2,
+        "keep": true,
+        "message": "Mișcă-te mai încet, controlat.",
+        "threshold": 0.5,
+        "calibrated_on": 168,
+        "fires_percent": {
+          "slab (<30)": 0,
+          "mediu": 0,
+          "bun (>=40)": 7
+        },
+        "enabled": true
+      }
+    ]
+  }
+}

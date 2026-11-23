@@ -97,6 +97,20 @@ private fun SessionDetails(s: Session) {
         }
     }
 
+    if (s.feedback.isNotEmpty()) {
+        SectionTitle("Observații în timpul exercițiului")
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                s.feedback.forEach { (message, count) ->
+                    Row(Modifier.fillMaxWidth()) {
+                        Text(message, Modifier.weight(1f))
+                        Text(if (count == 1) "o dată" else "de $count ori", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }
+
     SectionTitle("Recenzia medicului")
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

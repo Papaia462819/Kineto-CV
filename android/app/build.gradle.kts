@@ -38,12 +38,15 @@ android {
     sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/poseModel"))
 }
 
+// Tot de aici vin regulile de feedback live (config/feedback.json, calibrat de scripts/calibrate_feedback.py).
 val copyPoseModel by tasks.registering(Copy::class) {
     val model = rootProject.file("../models/pose_landmarker_full.task")
+    val rules = rootProject.file("../config/feedback.json")
     doFirst {
         check(model.exists()) { "Lipseste ${model.path}: descarca modelul MediaPipe in folderul models/ (vezi README)" }
+        check(rules.exists()) { "Lipseste ${rules.path}: ruleaza python scripts/calibrate_feedback.py" }
     }
-    from(model)
+    from(model, rules)
     into(layout.buildDirectory.dir("generated/poseModel"))
 }
 tasks.named("preBuild") { dependsOn(copyPoseModel) }
@@ -69,4 +72,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303") // org.json adevărat în testele JVM (în Android e deja inclus)
 }

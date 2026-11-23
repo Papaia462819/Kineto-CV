@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.speech.tts.TextToSpeech
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -65,6 +66,7 @@ import ro.kinetocv.app.pose.PoseFrame
 import ro.kinetocv.app.pose.PoseTracker
 import ro.kinetocv.app.pose.Recorder
 import ro.kinetocv.app.pose.judgeFrame
+import java.util.Locale
 import java.util.concurrent.Executors
 import kotlin.math.min
 
@@ -74,6 +76,7 @@ private val LEFT = listOf(11, 13, 15, 23, 25, 27)
 private val RIGHT = listOf(12, 14, 16, 24, 26, 28)
 private const val MIN_FRAMES = 30
 private const val REP_BANNER_MS = 2000L
+private const val FEEDBACK_MS = 3500L
 
 /** Ce afișează ecranul live; se actualizează la fiecare cadru procesat. */
 data class LiveUi(
@@ -87,6 +90,9 @@ data class LiveUi(
     val fps: Double = 0.0,
     val banner: String? = null,
     val bannerUntil: Long = 0,
+    val countdown: Double? = null, // secundele rămase din numărătoare
+    val feedback: String? = null, // ultimul mesaj de corectare, afișat mare câteva secunde
+    val feedbackUntil: Long = 0,
 )
 
 enum class Phase { Preview, Recording, Uploading, Failed }
@@ -114,12 +120,31 @@ class RecordController(context: Context, val exercise: Exercise) : AutoCloseable
     private var pendingJson: String? = null // păstrat ca să poți retrimite dacă rețeaua a căzut
     private var lastFrameMs = 0L
     private var fps = 0.0
+    private val rulesJson = context.assets.open("feedback.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
+    private var summary: Map<String, Int> = emptyMap()
+
+    // Vocea: pacientul stă la 2–3 m de telefon și nu poate citi ecranul, deci mesajele se și spun.
+    private var voiceReady = false
+    private val voice: TextToSpeech = TextToSpeech(context) { status ->
+        if (status == TextToSpeech.SUCCESS) {
+            val romanian = voice.setLanguage(Locale.forLanguageTag("ro-RO"))
+            voiceReady = romanian != TextToSpeech.LANG_MISSING_DATA && romanian != TextToSpeech.LANG_NOT_SUPPORTED
+            if (!voiceReady) main.post { error = "Vocea în română nu e instalată: mesajele apar doar pe ecran." }
+        }
+    }
+
+    private fun say(text: String) {
+        if (voiceReady) voice.speak(text, TextToSpeech.QUEUE_FLUSH, null, text)
+    }
 
     fun start() {
         error = null
-        live = LiveAnalyzer(exercise, mirrored)
+        summary = emptyMap()
+        live = LiveAnalyzer(exercise, mirrored, rulesJson)
         recorder = Recorder()
         phase = Phase.Recording
+        ui = ui.copy(reps = 0, seconds = 0.0, banner = null, feedback = null, countdown = LiveAnalyzer.COUNTDOWN_S)
+        say("Stai nemișcat cinci secunde.")
     }
 
     fun cancel() {
@@ -127,14 +152,17 @@ class RecordController(context: Context, val exercise: Exercise) : AutoCloseable
         live = null
         pendingJson = null
         phase = Phase.Preview
-        ui = ui.copy(reps = 0, seconds = 0.0, banner = null)
+        ui = ui.copy(reps = 0, seconds = 0.0, banner = null, feedback = null, countdown = null)
+        voice.stop()
     }
 
     /** Oprește înregistrarea, o trimite la server și întoarce id-ul sesiunii (sau null dacă a eșuat). */
     suspend fun stopAndUpload(api: Api): Int? {
         val rec = recorder
+        live?.let { summary = it.feedback.summary() }
         recorder = null
         live = null
+        voice.stop()
         if (rec != null) {
             if (rec.size < MIN_FRAMES) {
                 error = "Înregistrarea e prea scurtă."
@@ -142,7 +170,8 @@ class RecordController(context: Context, val exercise: Exercise) : AutoCloseable
                 return null
             }
             val device = "${Build.MANUFACTURER} ${Build.MODEL}"
-            pendingJson = withContext(Dispatchers.Default) { rec.toJson(exercise.id, mirrored, device) }
+            val feedback = summary
+            pendingJson = withContext(Dispatchers.Default) { rec.toJson(exercise.id, mirrored, device, feedback) }
         }
         val json = pendingJson ?: return null
         phase = Phase.Uploading
@@ -177,8 +206,13 @@ class RecordController(context: Context, val exercise: Exercise) : AutoCloseable
             val now = System.currentTimeMillis()
             var next = ui.copy(status = status, landmarks = frame.image, width = frame.width, height = frame.height, fps = currentFps)
             if (update != null && phase == Phase.Recording) {
-                next = next.copy(angle = update.angle, reps = update.reps, seconds = seconds)
-                update.newRepAmplitude?.let { next = next.copy(banner = "Repetarea ${update.reps}: %.0f°".format(it), bannerUntil = now + REP_BANNER_MS) }
+                if (ui.countdown != null && update.countdown == null) say("Începe exercițiul.")
+                next = next.copy(angle = update.angle, reps = update.reps, seconds = seconds, countdown = update.countdown)
+                update.newRep?.let { next = next.copy(banner = "Repetarea ${update.reps}: %.0f°".format(it.amplitude), bannerUntil = now + REP_BANNER_MS) }
+                update.feedback?.let {
+                    next = next.copy(feedback = it, feedbackUntil = now + FEEDBACK_MS)
+                    say(it)
+                }
             }
             ui = next
         }
@@ -186,6 +220,7 @@ class RecordController(context: Context, val exercise: Exercise) : AutoCloseable
 
     override fun close() {
         recorder = null
+        voice.shutdown()
         // Pe același fir cu analiza: modelul se închide abia după ultimul cadru aflat în lucru.
         executor.execute { tracker.close() }
         executor.shutdown()
@@ -225,6 +260,7 @@ fun RecordScreen(app: AppContainer, exerciseId: Int, onBack: () -> Unit, onDone:
                 scope.launch { controller.stopAndUpload(app.api)?.let(onDone) }
             })
         }
+        BigMessages(controller)
     }
 }
 
@@ -274,6 +310,35 @@ private fun SkeletonOverlay(ui: LiveUi, flipX: Boolean) {
         BONES.forEach { (a, b) -> drawLine(boneColor, p(a), p(b), strokeWidth = 8f) }
         LEFT.forEach { drawCircle(Color(0xFFE63C3C), 12f, p(it)) }
         RIGHT.forEach { drawCircle(Color(0xFF288CE6), 12f, p(it)) }
+    }
+}
+
+/** Ce trebuie văzut de la 2–3 metri: numărătoarea și mesajul de corectare, mari. */
+@Composable
+private fun BigMessages(controller: RecordController) {
+    val ui = controller.ui
+    if (controller.phase != Phase.Recording) return
+    val countdown = ui.countdown
+    if (countdown != null) {
+        Box(Modifier.fillMaxSize().background(Color(0x88000000)), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("${kotlin.math.ceil(countdown).toInt()}", color = Color.White, fontSize = 160.sp, fontWeight = FontWeight.Bold)
+                Text("Stai nemișcat", color = Color(0xFFFFE082), fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                Text("Memorez poziția ta de start", color = Color.White, fontSize = 16.sp)
+            }
+        }
+    } else if (ui.feedback != null && System.currentTimeMillis() < ui.feedbackUntil) {
+        Box(Modifier.fillMaxSize().safeDrawingPadding().padding(bottom = 96.dp, start = 16.dp, end = 16.dp),
+            contentAlignment = Alignment.BottomCenter) {
+            Text(
+                ui.feedback,
+                color = Color(0xFFFFE082),
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 36.sp,
+                modifier = Modifier.background(Color(0xCC000000), RoundedCornerShape(16.dp)).padding(16.dp),
+            )
+        }
     }
 }
 

@@ -32,9 +32,9 @@ VALUES_PER_FRAME = 33 * 4  # 33 de puncte × (x, y, z, vizibilitate)
 EXERCISES = [
     {"id": 1, "name": "Ridicarea brațelor", "description": "Brațele întinse urcă prin față deasupra capului și coboară."},
     {"id": 2, "name": "Înclinări laterale", "description": "Cu brațele sus, trunchiul se înclină spre stânga și spre dreapta."},
-    {"id": 3, "name": "Rotația brațelor", "description": "Cu brațele în lateral, trunchiul se rotește stânga-dreapta."},
+    {"id": 3, "name": "Rotația trunchiului", "description": "Cu bastonul ținut în față, la nivelul umerilor, trunchiul se rotește stânga-dreapta."},
     {"id": 4, "name": "Rotația pelvisului", "description": "Cu mâinile pe șolduri, pelvisul se rotește în plan orizontal."},
-    {"id": 5, "name": "Genuflexiuni", "description": "Cu brațele în față, coborî în genuflexiune și urci."},
+    {"id": 5, "name": "Genuflexiuni", "description": "Cu bastonul ținut în față, cobori în genuflexiune și urci."},
 ]
 
 
@@ -48,6 +48,7 @@ class Recording(BaseModel):
     exercise: int = Field(ge=1, le=5)
     mirrored: bool = False  # imaginea dată lui MediaPipe era în oglindă
     device: str | None = None
+    feedback: dict[str, int] = {}  # mesajele de corectare spuse live, cu de câte ori (src/feedback.py)
     frames: list[Frame]
 
 
@@ -126,6 +127,7 @@ def create_app(db_path=None, models_dir=None, keypoints_dir=KEYPOINTS_DIR):
         existing_patient(patient_id)
         image_kp, world_kp, times = recording_arrays(recording)
         result = state["analyzer"].analyze(image_kp, world_kp, times, recording.exercise, recording.mirrored)
+        result.feedback = recording.feedback
         session_id = storage().add_session(patient_id, result.to_dict(), recording.device)
         path = Path(keypoints_dir) / f"{session_id}.npz"
         path.parent.mkdir(parents=True, exist_ok=True)

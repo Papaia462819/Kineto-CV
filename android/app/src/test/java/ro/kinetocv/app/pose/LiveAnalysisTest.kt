@@ -1,5 +1,7 @@
 package ro.kinetocv.app.pose
 
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,6 +27,57 @@ class LiveAnalysisTest {
             val world = FloatArray(Joints.VALUES) { values[3 + it].toFloat() }
             // Telefonul lucrează cu float (32 de biți), Python cu double: diferențe de ordinul 0,001°.
             assertEquals("Es$exercise", expected, primaryAngle(exercise, world, mirrored), 0.01)
+        }
+    }
+
+    @Test
+    fun frameMeasuresMatchPython() {
+        val lines = resource("measures.csv").trim().lines()
+        val header = lines.first().split(",")
+        for (line in lines.drop(1)) {
+            val values = line.split(",")
+            val world = FloatArray(Joints.VALUES) { values[1 + MEASURES.size + it].toFloat() }
+            val measures = frameMeasures(world, values[0] == "1")
+            MEASURES.forEachIndexed { k, name ->
+                assertEquals(header[1 + k], name)
+                val expected = values[1 + k].toDouble()
+                val actual = measures.getValue(name)
+                if (expected.isNaN()) assertTrue(name, actual.isNaN())
+                else assertEquals(name, expected, actual, 0.01 + 1e-4 * kotlin.math.abs(expected))
+            }
+        }
+    }
+
+    @Test
+    fun feedbackEngineSaysWhatPythonSays() {
+        val data = JSONObject(resource("feedback.json"))
+        val rules = data.getJSONArray("rules").let { a -> List(a.length()) { parseRule(a.getJSONObject(it)) } }
+        val engine = FeedbackEngine(rules, parseSettings(data.getJSONObject("settings")))
+        fun measures(o: JSONObject) = o.keys().asSequence().associateWith { o.getDouble(it) }
+        val baseline = data.getJSONArray("baseline")
+        engine.setBaseline(List(baseline.length()) { measures(baseline.getJSONObject(it)) })
+        val frames = data.getJSONArray("frames")
+        val said = ArrayList<Pair<Int, String>>()
+        for (i in 0 until frames.length()) {
+            val frame = frames.getJSONObject(i)
+            val m = if (frame.isNull("m")) null else measures(frame.getJSONObject("m"))
+            val rep = if (frame.isNull("rep")) null else frame.getJSONArray("rep").let { RepTimes(it.getDouble(0), it.getDouble(1), it.getDouble(2), it.getDouble(3)) }
+            engine.update(frame.getDouble("t"), m, rep)?.let { said.add(i to it) }
+        }
+        val expected = data.getJSONArray("said").let { a -> List(a.length()) { a.getJSONArray(it).let { p -> p.getInt(0) to p.getString(1) } } }
+        assertEquals(expected, said)
+        val summary = data.getJSONObject("summary")
+        assertEquals(summary.keys().asSequence().associateWith { summary.getInt(it) }, engine.summary())
+    }
+
+    @Test
+    fun calibratedRulesLoadForEveryExercise() {
+        val json = java.io.File("../../config/feedback.json").takeIf { it.exists() }?.readText()
+            ?: java.io.File("../config/feedback.json").readText()
+        for (exercise in 1..5) {
+            val (settings, rules) = loadRules(json, exercise)
+            assertTrue(settings.holdS > 0)
+            assertTrue("Es$exercise", rules.any { it.enabled && it.kind == "rep" || it.kind == "hold" })
         }
     }
 
@@ -58,8 +111,10 @@ class LiveAnalysisTest {
             assertEquals(0.0, recorder.add(1000, points, points)!!, 1e-9)
             recorder.add(1033, null, null)
             assertEquals(null, recorder.add(1033, points, points)) // același timp: ignorat
-            val json = recorder.toJson(1, false, "Test \"Phone\"")
-            assertTrue(json.startsWith("{\"exercise\":1,\"mirrored\":false,\"device\":\"Test Phone\",\"frames\":[{\"t\":0.0,\"image\":[0.5,"))
+            val json = recorder.toJson(1, false, "Test \"Phone\"", mapOf("Ține coatele întinse." to 2))
+            assertTrue(json.startsWith("{\"exercise\":1,\"mirrored\":false,\"device\":\"Test Phone\"," +
+                "\"feedback\":{\"Ține coatele întinse.\":2},\"frames\":[{\"t\":0.0,\"image\":[0.5,"))
+            JSONObject(json) // JSON valid
             assertTrue(json.endsWith(",{\"t\":0.033}]}"))
             assertFalse(json.contains("0,5"))
         } finally {

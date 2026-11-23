@@ -2,10 +2,10 @@
 .venv/
 
 # Date: dataset-uri, filmări cu oameni, keypoints, baza SQLite
-data/
+/data/
 
 # Modele descărcate sau antrenate
-models/*
+/models/*
 
 # Python și Jupyter
 __pycache__/

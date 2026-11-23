@@ -19,6 +19,7 @@ import argparse
 import json
 import sys
 import time
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -32,7 +33,7 @@ from src.quality import MISSING, OK
 from src.session import Analyzer, LiveSession
 
 SESSIONS = ROOT / "data" / "sessions"
-EXERCISE_NAMES = {1: "Ridicarea bratelor", 2: "Inclinari laterale", 3: "Rotatia bratelor",
+EXERCISE_NAMES = {1: "Ridicarea bratelor", 2: "Inclinari laterale", 3: "Rotatia trunchiului",
                   4: "Rotatia pelvisului", 5: "Genuflexiuni"}
 BONES = [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16), (11, 23), (12, 24), (23, 24),
          (23, 25), (25, 27), (24, 26), (26, 28)]
@@ -40,6 +41,12 @@ LEFT, RIGHT = [11, 13, 15, 23, 25, 27], [12, 14, 16, 24, 26, 28]
 RED, BLUE, GREEN, GREY, WHITE, YELLOW = (60, 60, 230), (230, 140, 40), (80, 200, 80), (150, 150, 150), \
     (255, 255, 255), (0, 220, 255)
 REP_BANNER_S = 2.0
+FEEDBACK_S = 3.0  # cât stă mesajul de corectare pe ecran
+
+
+def plain(text):
+    """Fără diacritice: fontul OpenCV și consola Windows nu le pot scrie pe toate."""
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
 
 
 def draw_skeleton(frame, image_kp, ok):
@@ -73,6 +80,9 @@ def result_lines(result):
     if not np.isnan(result.rom_fatigue):
         lines.append(f"Amplitudine la final fata de inceput: {result.rom_fatigue:.0%}")
     lines += [(f"! {w}", (80, 160, 255)) for w in result.warnings]
+    if result.feedback:
+        lines.append(("Observatii in timpul exercitiului:", YELLOW))
+        lines += [f"  {plain(message)} (x{count})" for message, count in result.feedback.items()]
     return lines
 
 
@@ -108,6 +118,7 @@ def main():
     parser.add_argument("--exercise", type=int, default=1, choices=range(1, 6))
     parser.add_argument("--mirrored", action="store_true", help="imaginea vine deja in oglinda (ex. KIMORE)")
     parser.add_argument("--no-window", action="store_true", help="fara fereastra (doar cu --video)")
+    parser.add_argument("--countdown", type=float, default=5.0, help="secundele de stat nemiscat de la start")
     args = parser.parse_args()
     if args.no_window and not args.video:
         sys.exit("--no-window merge doar cu --video")
@@ -120,13 +131,16 @@ def main():
     print(f"Es{args.exercise} {EXERCISE_NAMES[args.exercise]}. Modele incarcate.")
 
     mirrored = args.mirrored
-    session = LiveSession(args.exercise, mirrored) if args.video else None  # un video se înregistrează tot
+    new_session = lambda: LiveSession(args.exercise, mirrored, countdown_s=args.countdown)
+    session = new_session() if args.video else None  # un video se înregistrează tot
     start, frames, fps_shown, last_tick = time.perf_counter(), 0, 0.0, time.perf_counter()
     banner, banner_until = "", 0.0
+    said, said_until = "", 0.0
 
     def finish(last_frame):
         nonlocal session
         result = analyzer.analyze(*session.recording(), args.exercise, session.mirrored)
+        result.feedback = session.feedback.summary()
         folder = save_session(session, result, list(last_frame.shape[1::-1]))
         print_result(result, folder)
         session = None
@@ -154,6 +168,9 @@ def main():
                 status, message = state.status, state.message
                 if state.new_rep is not None:
                     banner, banner_until = f"Repetarea {state.reps}: {state.new_rep.amplitude:.0f} grade", now + REP_BANNER_S
+                if state.feedback:
+                    said, said_until = plain(state.feedback), now + FEEDBACK_S
+                    print(f"[{t:5.1f} s] {said}")
             else:
                 # Înainte de start: doar verificăm că persoana se vede, ca să se poată așeza.
                 visible = not np.isnan(image_kp[[11, 12, 23, 24, 27, 28], 0]).any()
@@ -182,6 +199,15 @@ def main():
                 lines.append((banner, YELLOW))
             put_lines(frame, lines)
             put_lines(frame, [f"FPS {fps_shown:.0f}"], top=frame.shape[0] - 15, scale=0.6)
+            h, w = frame.shape[:2]
+            if session is not None and state.countdown is not None:
+                # Numărătoarea: mare, în mijloc. Acum se memorează poziția de start.
+                number = str(int(np.ceil(state.countdown)))
+                cv2.putText(frame, number, (w // 2 - 60, h // 2 + 60), cv2.FONT_HERSHEY_SIMPLEX, 6, (0, 0, 0), 18)
+                cv2.putText(frame, number, (w // 2 - 60, h // 2 + 60), cv2.FONT_HERSHEY_SIMPLEX, 6, WHITE, 8)
+                put_lines(frame, [("Stai nemiscat", YELLOW)], top=h // 2 + 120, scale=1.0)
+            elif session is not None and now < said_until:
+                put_lines(frame, [(said, YELLOW)], top=h - 60, scale=1.1)
             cv2.imshow("Kineto-CV", frame)
 
             key = cv2.waitKey(1) & 0xFF
@@ -191,7 +217,7 @@ def main():
                 continue
             if key == ord(" "):
                 if session is None:
-                    session, banner_until = LiveSession(args.exercise, mirrored), 0.0
+                    session, banner_until, said_until = new_session(), 0.0, 0.0
                 else:
                     if show_result(frame, finish(frame), wait=True) == ord("q"):
                         break
