@@ -22,6 +22,11 @@ camera / video → MediaPipe (33 de puncte) → verificare → netezire → ungh
 | `src/execution_features.py` | rezumatul unei execuții: statistici pe unghiuri (A) și pe repetări (B) |
 | `src/clinical_features.py` | mărimile clinicienilor KIMORE, traduse din MATLAB (C) |
 | `src/clinical_score.py` | modelul de scor clinic |
+| `src/session.py` | o execuție în aplicație: urmărirea live și analiza de la final, cu scorul |
+| `scripts/app.py` | aplicația pe laptop: camera sau video, repetările live, scorul la final |
+| `src/storage.py` | baza de date SQLite: pacienți, plan, sesiuni, recenziile medicului, mesaje |
+| `src/api.py` | serverul pentru telefon (FastAPI): primește punctele, rulează analiza, păstrează datele |
+| `android/` | aplicația Android (Kotlin): MediaPipe și partea live pe telefon, scorul de la server |
 
 ## Rezultate pe KIMORE (validare pe persoane nevăzute)
 
@@ -47,7 +52,28 @@ Modelul MediaPipe (`pose_landmarker_full.task`) se descarcă de pe site-ul Media
 python -m pytest                              # testele
 python scripts/webcam_test.py --list          # camerele disponibile
 python scripts/webcam_test.py --camera 0 --exercise 1
+python scripts/app.py --camera 0 --exercise 1             # aplicația: SPAȚIU start/stop, apoi scorul
+python scripts/app.py --video clip.mp4 --exercise 1 --mirrored   # pe un video (KIMORE e în oglindă)
 ```
+
+## Telefon + server
+
+```
+telefon (Kotlin): camera → MediaPipe → repetări live ──puncte brute──► laptop (Python): src/session.py → scor
+```
+
+Pe laptop:
+
+```
+python scripts/seed_demo.py --reset           # o dată: baza de date cu un pacient demo
+python scripts/run_server.py                  # afișează adresa de pus în aplicație
+```
+
+Pe telefon: deschide folderul `android/` în Android Studio și rulează aplicația (modelul MediaPipe se copiază
+automat din `models/`). În aplicație, la Setări, pune adresa afișată de server. Telefonul și laptopul trebuie să fie
+în aceeași rețea Wi-Fi; prima dată, Windows întreabă dacă Python are voie în rețea: „Rețele private”.
+
+Prototip: fără autentificare și fără HTTPS, doar pentru rețeaua de acasă și date demonstrative.
 
 Pașii pe KIMORE, în ordine (datele se pun în `data/kimore/`):
 

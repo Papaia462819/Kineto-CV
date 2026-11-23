@@ -1,0 +1,126 @@
+Ce am făcut până acum
+
+1. Datele și mediul de lucru
+
+- Date: KIMORE, 78 de persoane (sănătoși și pacienți), 5 exerciții pentru spate. Fiecare execuție are:
+  - video RGB;
+  - scheletul Kinect;
+  - scorul clinic 0–50 dat de medici.
+- De ce KIMORE: e singurul dataset cu video, schelet de referință și note de la medici, toate deodată.
+- Prelucrare:
+  - build_kimore_index.py adună într-un singur tabel (index.csv) căile fișierelor, scorurile din Excel și grupul fiecărei persoane;
+  - extract_keypoints.py rulează MediaPipe pe toate cele 353 de videoclipuri și salvează punctele;
+  - adnotările repetărilor sunt luate din repository-ul repetition-segmentation.
+- Librării: Python cu .venv, NumPy, pandas, SciPy, scikit-learn, OpenCV, MediaPipe, pytest.
+- Git: repository local, urcat acum pe GitHub. data/ și models/ nu sunt în git.
+
+2. Detecția punctelor: MediaPipe
+
+- Alegerea: MediaPipe Pose (modelul „full”), 33 de puncte 3D.
+- De ce: merge în timp real pe procesorul laptopului și pe telefon, fără senzor special. Kinect l-am păstrat doar ca referință (măsoară adâncimea), ca să aflăm cât de bun e MediaPipe.
+- Ce am descoperit:
+  - videoclipurile KIMORE sunt în oglindă față de Kinect;
+  - MediaPipe răstoarnă uneori scheletul;
+  - greșește mai ales când persoana e mică în cadru;
+  - vizibilitatea raportată de MediaPipe nu ajută la depistarea cadrelor greșite.
+
+3. Pipeline-ul: verificare → netezire → unghiuri → repetări
+
+┌────────────┬─────────────┬─────────────────────────────────────────────────┬────────────────────────────────────┐
+│    Pas     │   Fișier    │                   Ce am ales                    │               De ce                │
+├────────────┼─────────────┼─────────────────────────────────────────────────┼────────────────────────────────────┤
+│            │             │ reguli geometrice: umerii deasupra șoldurilor,  │ prinde cadrele aberante; regula    │
+│ Verificare │ quality.py  │ proporțiile oaselor, salturi bruște; corectarea │ „în picioare” s-a dovedit cea mai  │
+│            │             │  stânga/dreapta                                 │ utilă                              │
+├────────────┼─────────────┼─────────────────────────────────────────────────┼────────────────────────────────────┤
+│            │             │ Savitzky–Golay pentru video întreg, One Euro    │ elimină tremuratul. One Euro are   │
+│ Netezire   │ filters.py  │ pentru live                                     │ întârziere mică (~2 cadre), deci   │
+│            │             │                                                 │ merge live.                        │
+├────────────┼─────────────┼─────────────────────────────────────────────────┼────────────────────────────────────┤
+│            │             │ 13 unghiuri (umeri, coate, genunchi, șolduri,   │ aceleași formule pe ambele surse,  │
+│ Unghiuri   │ features.py │ trunchi, rotații), în axe comune pentru         │ deci se pot compara                │
+│            │             │ MediaPipe și Kinect                             │                                    │
+├────────────┼─────────────┼─────────────────────────────────────────────────┼────────────────────────────────────┤
+│ Repetări   │ reps.py     │ detecție de vârfuri (find_peaks) offline,       │ o repetare = unghiul principal     │
+│            │             │ mașină de stări live                            │ urcă și coboară destul             │
+└────────────┴─────────────┴─────────────────────────────────────────────────┴────────────────────────────────────┘
+
+- Rezultate:
+  - repetările: eroare de 1,6 repetări în medie; pe filmări bune, 61% exact și 88% cu cel mult o repetare diferență;
+  - unghiurile umerilor și ale trunchiului urmăresc Kinect foarte bine (corelație 0,97–0,98);
+  - rotațiile sunt slabe, pentru că depind de adâncime;
+  - tot lanțul costă ~2 ms pe cadru.
+- webcam_test.py: testul live cu camera e scris, dar netestat încă pe camera reală (lipsește trepiedul).
+
+4. E8: recunoașterea exercițiului
+
+- Intrare: 78 de numere pe execuție (13 unghiuri × 6 statistici: medie, abatere, p5, p95, amplitudine, viteză).
+- Model ales: regresie logistică simplă.
+- De ce: Random Forest și reglarea pragurilor au ieșit mai slab; cu date puține, simplitatea a câștigat.
+- Validare: pe persoane nevăzute, repetată de 5×5 ori.
+- Rezultat: 94% pe MediaPipe, 97% pe Kinect.
+- Concluzia utilă: MediaPipe e aproape la fel de bun ca Kinect când filmarea e bună. Clasificatorul nu intră în aplicație, pentru că utilizatorul alege exercițiul.
+
+5. E7: scorul clinic (0–50)
+
+- Intrare: un rând pe execuție, 117–136 de numere:
+  - A: cele 78 de la E8;
+  - B: repetările (amplitudine, oboseală, tempo, regularitate, compensare…);
+  - C: mărimile medicilor KIMORE, traduse din MATLAB (aria trunchiului, distanța dintre mâini, axila…).
+- Ieșire: nota medicului.
+- Model ales: media a 4 modele:
+  - un model comun pe toate exercițiile (gradient boosting, pe A+B);
+  - trei modele pe exercițiu (gradient boosting, random forest, ridge, pe A+B+C).
+- De ce: am încercat 36 de variante. Alegerea automată pe exercițiu era instabilă, iar combinația a fost cea mai bună și cea mai stabilă.
+- Rezultat: eroare medie de 6,0 puncte pe MediaPipe și 5,2 pe Kinect, față de 8,1 dacă ghicești media. Modelul ordonează și pacienții după severitate.
+- Kinect, doar ca riglă: arată că doar ~0,8 puncte se pierd din cauza camerei simple. Restul erorii vine din puținele date.
+
+Ce mai trebuie făcut (în ordinea din plan)
+
+┌─────┬─────────────────────────────────────────────────────────┬─────────────────────────────────────────────────┐
+│ Pas │                           Ce                            │          De ce e nevoie / ce lipsește           │
+├─────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 1   │ Trepied + test live cu telefonul (DroidCam/Iriun), apoi │ să vedem că pipeline-ul merge pe camera ta, nu  │
+│     │  webcam_test.py                                         │ doar pe KIMORE                                  │
+├─────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 2   │ Sesiunea 1 de filmare (tu) și E1: unghiuri statice cu   │ precizia reală a unghiurilor; decide unghiul    │
+│     │ goniometru și phyphox                                   │ camerei (frontal, lateral sau la 45°)           │
+├─────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 3   │ Regulile de formă (exercises.yaml, rules.py) cu         │ partea obligatorie de feedback; pragurile vin   │
+│     │ feedback live („ține cotul întins”), plus E3            │ din KIMORE și din filmările tale                │
+├─────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 4   │ Aplicația live (app.py): camera → numărare → mesaje →   │ produsul propriu-zis; folosește tot ce am       │
+│     │ scor la final, plus E4 (FPS, latență)                   │ construit                                       │
+├─────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 5   │ DTW: comparația cu o execuție de referință              │ recomandat în plan                              │
+├─────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 6   │ Sesiunea 2 cu voluntari: repetabilitate și recuperare   │ numărarea pe alți oameni și pragul de la care o │
+│     │ simulată, plus E2, E5, E6                               │  schimbare e progres real (MDC)                 │
+├─────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 7   │ Stocare (SQLite) și dashboard (Streamlit + Plotly) cu   │ obligatoriu în plan                             │
+│     │ progresul în timp                                       │                                                 │
+├─────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 8   │ Opțional: KERAAL (E9/E10), aplicația pe telefon         │ doar dacă rămâne timp                           │
+│     │ (versiune web)                                          │                                                 │
+├─────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 9   │ Raport și demo                                          │ experimentele ca scripturi care regenerează     │
+│     │                                                         │ tabelele și graficele                           │
+└─────┴─────────────────────────────────────────────────────────┴─────────────────────────────────────────────────┘
+
+
+
+Pe telefon (Kotlin):
+- interfața, camera și MediaPipe, cu biblioteca MediaPipe Tasks pentru Android și același fișier pose_landmarker_full.task. Dă aceleași două seturi de puncte ca în Python: cele din imagine și cele în metri (world);
+- răspunsul live: o verificare simplă a cadrului, netezirea One Euro, unghiul principal, numărarea repetărilor și, mai târziu, regulile de formă. Pentru asta rescrii în Kotlin QualityChecker, OneEuroFilter, unghiurile și RepCounter, într-o variantă simplă;
+- colectarea punctelor brute, adică exact cum ies din MediaPipe, nu pe cele netezite, împreună cu timpul fiecărui cadru.
+
+Ce trimite telefonul la final: punctele brute, timpii, numărul exercițiului și dacă imaginea e în oglindă. Camera frontală a telefonului oglindește de obicei imaginea, așa că steagul ăsta contează.
+
+Pe server (Python, codul existent):
+1. readucerea la 30 de cadre/s;
+2. curățarea cadrelor greșite;
+3. netezirea Savitzky–Golay;
+4. unghiurile și rândul de numere A + B + C;
+5. modelul de scor și recunoașterea exercițiului;
+6. răspunsul înapoi: scor, repetări, amplitudine, avertismente.
+

@@ -16,10 +16,9 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from src.clinical_features import clinical_summary
-from src.execution_features import (compute_angles, joints_from_kinect, joints_from_mediapipe, repetition_summary,
-                                    summarize, valid_seconds)
+from src.execution_features import joints_from_kinect, joints_from_mediapipe
 from src.kinect import load_kinect
+from src.session import feature_row
 
 INDEX = ROOT / "data" / "kimore" / "index.csv"
 KEYPOINTS = ROOT / "data" / "keypoints" / "kimore"
@@ -30,11 +29,8 @@ META = ["subject", "group", "population", "exercise", "score_total", "score_po",
 
 
 def row_from_joints(row, joints, kept):
-    angles = compute_angles(joints)
-    exercise = int(row["exercise"])
-    return {**{key: row[key] for key in META}, "kept": kept, "valid_s": valid_seconds(angles, FPS),
-            **summarize(angles, FPS), **repetition_summary(angles, exercise, FPS),
-            **clinical_summary(joints, exercise, FPS)}
+    # Același rând ca în aplicație (src/session.py), ca modelul să primească numerele calculate la fel.
+    return {**{key: row[key] for key in META}, "kept": kept, **feature_row(joints, int(row["exercise"]), FPS)}
 
 
 def kinect_row(row):
