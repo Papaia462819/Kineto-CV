@@ -18,6 +18,15 @@ data class Patient(
     val id: Int, val name: String, val birthYear: Int?, val diagnosis: String?, val therapist: String?, val plan: List<PlanItem>,
 )
 
+/**
+ * Măsurile unei repetări, calculate pe server (src/execution_features.py: repetition_details).
+ * rom = amplitudinea (grade), upS/downS = urcarea și coborârea (s), jerk = netezimea (mai mic = mai lin),
+ * compensation și asymmetry în grade (asimetria doar la exercițiile cu pereche stânga/dreapta).
+ */
+data class RepDetail(
+    val rom: Double?, val upS: Double?, val downS: Double?, val jerk: Double?, val compensation: Double?, val asymmetry: Double?,
+)
+
 data class Session(
     val id: Int,
     val created: String,
@@ -35,6 +44,7 @@ data class Session(
     val reviewText: String?,
     val reviewAuthor: String?,
     val reviewCreated: String?,
+    val repDetails: List<RepDetail> = emptyList(),
 )
 
 data class Message(val id: Int, val created: String, val authorRole: String, val authorName: String, val text: String)
@@ -52,6 +62,16 @@ class Settings(context: Context) {
     var patientId: Int
         get() = prefs.getInt("patient_id", 1)
         set(value) = prefs.edit().putInt("patient_id", value).apply()
+
+    /** Mărimea textului: 0 normal, 1 mare, 2 foarte mare. */
+    var textSize: Int
+        get() = prefs.getInt("text_size", 0)
+        set(value) = prefs.edit().putInt("text_size", value).apply()
+
+    /** Mesajele spuse cu voce în timpul exercițiului. */
+    var voice: Boolean
+        get() = prefs.getBoolean("voice", true)
+        set(value) = prefs.edit().putBoolean("voice", value).apply()
 
     companion object {
         // Adresa laptopului în rețeaua de acasă; scripts/run_server.py o afișează la pornire.
@@ -126,6 +146,10 @@ class Api(private val settings: Settings) {
         reviewText = o.stringOrNull("review_text"),
         reviewAuthor = o.stringOrNull("review_author"),
         reviewCreated = o.stringOrNull("review_created"),
+        repDetails = o.optJSONArray("rep_details")?.objects()?.map {
+            RepDetail(it.doubleOrNull("rom"), it.doubleOrNull("up_s"), it.doubleOrNull("down_s"), it.doubleOrNull("jerk"),
+                it.doubleOrNull("compensation"), it.doubleOrNull("asymmetry"))
+        } ?: emptyList(),
     )
 
     private fun message(o: JSONObject) =

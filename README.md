@@ -71,8 +71,10 @@ python scripts/run_server.py                  # afișează adresa de pus în apl
 ```
 
 Pe telefon: deschide folderul `android/` în Android Studio și rulează aplicația (modelul MediaPipe se copiază
-automat din `models/`). În aplicație, la Setări, pune adresa afișată de server. Telefonul și laptopul trebuie să fie
-în aceeași rețea Wi-Fi; prima dată, Windows întreabă dacă Python are voie în rețea: „Rețele private”.
+automat din `models/`). În aplicație, la Profil → Avansat → Conexiunea cu serverul, pune adresa afișată de server
+și apasă „Testează conexiunea”. Telefonul și laptopul trebuie să fie în aceeași rețea Wi-Fi; prima dată, Windows
+întreabă dacă Python are voie în rețea: „Rețele private”. Pe emulatorul din Android Studio merge și adresa
+`http://10.0.2.2:8000` (emulatorul vede laptopul la această adresă).
 
 Prototip: fără autentificare și fără HTTPS, doar pentru rețeaua de acasă și date demonstrative.
 

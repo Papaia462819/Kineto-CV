@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from src.clinical_features import clinical_feature_names, clinical_summary
-from src.execution_features import ANGLES, REPETITION_NAMES, repetition_summary
+from src.execution_features import ANGLES, REPETITION_DETAILS, REPETITION_NAMES, repetition_details, repetition_summary
 
 FPS = 30.0
 
@@ -30,6 +30,26 @@ def test_repetition_summary_counts_and_measures_reps():
     assert row["rep__rom_cv"] == pytest.approx(0, abs=0.02)
     assert row["rep__interval_cv"] == pytest.approx(0, abs=0.02)
     assert row["rep__asymmetry"] == pytest.approx(0, abs=1e-6)
+
+
+def test_repetition_details_has_one_row_per_rep_matching_the_summary():
+    angles = angles_with_reps([120, 120, 100, 80, 60, 60])
+    details = repetition_details(angles, exercise=1, fps=FPS)
+    summary = repetition_summary(angles, exercise=1, fps=FPS)
+    assert len(details) == summary["rep__count"] == 6
+    assert all(list(d) == REPETITION_DETAILS for d in details)
+    rom = [d["rom"] for d in details]
+    assert rom == pytest.approx([120, 120, 100, 80, 60, 60], rel=0.05)
+    assert np.mean(rom) == pytest.approx(summary["rep__rom_mean"], abs=0.01)
+    assert all(d["up_s"] > 0 and d["down_s"] > 0 for d in details)
+
+
+def test_repetition_details_without_reps_or_symmetry():
+    assert repetition_details(angles_with_reps([]), exercise=1, fps=FPS) == []
+    table = angles_with_reps([100] * 3)
+    table["trunk_tilt"] = table["shoulder_mean"]  # exercițiul 2 nu are pereche stânga/dreapta
+    details = repetition_details(table, exercise=2, fps=FPS)
+    assert len(details) == 3 and all(d["asymmetry"] is None for d in details)
 
 
 def test_fatigue_sees_shrinking_amplitude():

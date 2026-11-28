@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     score REAL, score_error REAL, looks_like INTEGER, looks_like_p REAL,
     warnings TEXT NOT NULL DEFAULT '[]',
     feedback TEXT NOT NULL DEFAULT '{}',
+    rep_details TEXT NOT NULL DEFAULT '[]',
     keypoints_path TEXT,
     review_text TEXT, review_author TEXT, review_created TEXT
 );
@@ -66,11 +67,12 @@ class Storage:
         self._db = sqlite3.connect(self.path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
-        # O bază făcută înainte de feedback-ul live nu are coloana: o adăugăm, fără să pierdem datele.
+        # O bază mai veche nu are coloanele adăugate între timp: le adăugăm, fără să pierdem datele.
         columns = {row["name"] for row in self._db.execute("PRAGMA table_info(sessions)")}
-        if "feedback" not in columns:
-            with self._db:
-                self._db.execute("ALTER TABLE sessions ADD COLUMN feedback TEXT NOT NULL DEFAULT '{}'")
+        for name, default in [("feedback", "'{}'"), ("rep_details", "'[]'")]:
+            if name not in columns:
+                with self._db:
+                    self._db.execute(f"ALTER TABLE sessions ADD COLUMN {name} TEXT NOT NULL DEFAULT {default}")
 
     def close(self):
         self._db.close()
@@ -101,13 +103,15 @@ class Storage:
 
     # Sesiuni
     def add_session(self, patient_id, result, device=None, keypoints_path=None, created=None):
-        """result: dicționarul din ExecutionResult.to_dict() (feedback = {mesaj: de câte ori a fost spus live})."""
+        """result: dicționarul din ExecutionResult.to_dict() (feedback = {mesaj: de câte ori a fost spus live},
+        rep_details = măsurile fiecărei repetări)."""
         return self._write(
             f"INSERT INTO sessions (patient_id, created, exercise, device, {', '.join(RESULT_FIELDS)}, warnings, "
-            f"feedback, keypoints_path) VALUES ({', '.join('?' * (len(RESULT_FIELDS) + 7))})",
+            f"feedback, rep_details, keypoints_path) VALUES ({', '.join('?' * (len(RESULT_FIELDS) + 8))})",
             patient_id, created or now(), result["exercise"], device, *[result[f] for f in RESULT_FIELDS],
             json.dumps(result["warnings"], ensure_ascii=False),
-            json.dumps(result.get("feedback") or {}, ensure_ascii=False), keypoints_path)
+            json.dumps(result.get("feedback") or {}, ensure_ascii=False),
+            json.dumps(result.get("rep_details") or [], ensure_ascii=False), keypoints_path)
 
     def set_keypoints_path(self, session_id, path):
         self._write("UPDATE sessions SET keypoints_path = ? WHERE id = ?", str(path), session_id)
@@ -120,6 +124,7 @@ class Storage:
     def _session(row):
         row["warnings"] = json.loads(row["warnings"])
         row["feedback"] = json.loads(row["feedback"])
+        row["rep_details"] = json.loads(row["rep_details"])
         row.pop("keypoints_path", None)  # e un drum pe server, nu interesează clientul
         return row
 

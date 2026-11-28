@@ -16,8 +16,8 @@ import numpy as np
 import pandas as pd
 
 from src.clinical_features import clinical_summary
-from src.execution_features import (FEATURE_NAMES, joints_from_mediapipe, repetition_summary, summarize,
-                                    valid_seconds)
+from src.execution_features import (FEATURE_NAMES, joints_from_mediapipe, repetition_details, repetition_summary,
+                                    summarize, valid_seconds)
 from src.feedback import RULES_FILE, FeedbackEngine, RepTimes, frame_measures, load_rules
 from src.features import PRIMARY_ANGLE, REP_PROMINENCE, compute_angles, named_joints
 from src.filters import OneEuroFilter
@@ -169,6 +169,7 @@ class ExecutionResult:
     looks_like_p: float | None
     warnings: list = field(default_factory=list)
     feedback: dict = field(default_factory=dict)  # {mesaj de corectare: de câte ori a fost spus live}
+    rep_details: list = field(default_factory=list)  # măsurile fiecărei repetări (repetition_details)
 
     def to_dict(self):
         return {k: (None if isinstance(v, float) and np.isnan(v) else v) for k, v in asdict(self).items()}
@@ -186,10 +187,11 @@ class Analyzer:
         self.classifier = joblib.load(classifier) if classifier.exists() else None
 
     def features(self, image_kp, world_kp, times, exercise, mirrored=False):
-        """Rândul de numere (A + B + C) și partea de cadre păstrate."""
+        """Rândul de numere (A + B + C), măsurile fiecărei repetări și partea de cadre păstrate."""
         image_kp, world_kp = resample(times, image_kp, world_kp)
         joints, kept = joints_from_mediapipe(image_kp, world_kp, ANALYSIS_FPS, mirrored)
-        return feature_row(joints, exercise), kept
+        details = repetition_details(compute_angles(joints), exercise, ANALYSIS_FPS)
+        return feature_row(joints, exercise), details, kept
 
     def analyze(self, image_kp, world_kp, times, exercise, mirrored=False):
         duration = float(times[-1] - times[0]) if len(times) > 1 else 0.0
@@ -197,7 +199,7 @@ class Analyzer:
         if len(times) < 2:
             return ExecutionResult(exercise, duration, 0.0, 0.0, 0, np.nan, np.nan, None, self.score_error,
                                    None, None, ["Nu s-a inregistrat nimic"])
-        row, kept = self.features(image_kp, world_kp, times, exercise, mirrored)
+        row, details, kept = self.features(image_kp, world_kp, times, exercise, mirrored)
         table = pd.DataFrame([row])
 
         complete = table[FEATURE_NAMES].notna().all(axis=1).iloc[0]
@@ -223,4 +225,4 @@ class Analyzer:
             warnings.append("Nu am gasit nicio repetare")
         return ExecutionResult(exercise, duration, kept, float(row["valid_s"]), int(row["rep__count"]),
                                float(row["rep__rom_mean"]), float(row["rep__rom_fatigue"]), score,
-                               self.score_error, looks_like, looks_like_p, warnings)
+                               self.score_error, looks_like, looks_like_p, warnings, rep_details=details)

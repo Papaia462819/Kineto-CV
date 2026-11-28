@@ -16,6 +16,26 @@ import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Cameraswitch
+import androidx.compose.material.icons.rounded.Flip
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
+import ro.kinetocv.app.ui.components.IconBubble
+import ro.kinetocv.app.ui.components.PrimaryButton
+import ro.kinetocv.app.ui.components.SecondaryButton
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +77,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ro.kinetocv.app.AppContainer
 import ro.kinetocv.app.data.Api
+import ro.kinetocv.app.data.Session
 import ro.kinetocv.app.data.userMessage
 import ro.kinetocv.app.pose.Exercise
 import ro.kinetocv.app.pose.Exercises
@@ -101,7 +122,7 @@ enum class Phase { Preview, Recording, Uploading, Failed }
  * Leagă camera, MediaPipe, partea live și înregistrarea. Cadrele vin pe firul MediaPipe;
  * starea pentru ecran se publică pe firul principal (Compose o citește de acolo).
  */
-class RecordController(context: Context, val exercise: Exercise) : AutoCloseable {
+class RecordController(context: Context, val exercise: Exercise, private val voiceOn: Boolean) : AutoCloseable {
     var phase by mutableStateOf(Phase.Preview)
         private set
     var ui by mutableStateOf(LiveUi())
@@ -129,12 +150,12 @@ class RecordController(context: Context, val exercise: Exercise) : AutoCloseable
         if (status == TextToSpeech.SUCCESS) {
             val romanian = voice.setLanguage(Locale.forLanguageTag("ro-RO"))
             voiceReady = romanian != TextToSpeech.LANG_MISSING_DATA && romanian != TextToSpeech.LANG_NOT_SUPPORTED
-            if (!voiceReady) main.post { error = "Vocea în română nu e instalată: mesajele apar doar pe ecran." }
+            if (!voiceReady && voiceOn) main.post { error = "Vocea în română nu e instalată: mesajele apar doar pe ecran." }
         }
     }
 
     private fun say(text: String) {
-        if (voiceReady) voice.speak(text, TextToSpeech.QUEUE_FLUSH, null, text)
+        if (voiceReady && voiceOn) voice.speak(text, TextToSpeech.QUEUE_FLUSH, null, text)
     }
 
     fun start() {
@@ -156,8 +177,8 @@ class RecordController(context: Context, val exercise: Exercise) : AutoCloseable
         voice.stop()
     }
 
-    /** Oprește înregistrarea, o trimite la server și întoarce id-ul sesiunii (sau null dacă a eșuat). */
-    suspend fun stopAndUpload(api: Api): Int? {
+    /** Oprește înregistrarea, o trimite la server și întoarce sesiunea analizată (sau null dacă a eșuat). */
+    suspend fun stopAndUpload(api: Api): Session? {
         val rec = recorder
         live?.let { summary = it.feedback.summary() }
         recorder = null
@@ -176,7 +197,7 @@ class RecordController(context: Context, val exercise: Exercise) : AutoCloseable
         val json = pendingJson ?: return null
         phase = Phase.Uploading
         return try {
-            api.upload(json).id.also { pendingJson = null }
+            api.upload(json).also { pendingJson = null }
         } catch (e: Exception) {
             error = e.userMessage()
             phase = Phase.Failed
@@ -228,7 +249,7 @@ class RecordController(context: Context, val exercise: Exercise) : AutoCloseable
 }
 
 @Composable
-fun RecordScreen(app: AppContainer, exerciseId: Int, onBack: () -> Unit, onDone: (Int) -> Unit) {
+fun RecordScreen(app: AppContainer, exerciseId: Int, onBack: () -> Unit, onDone: (Session) -> Unit) {
     val context = LocalContext.current
     var hasCamera by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -236,17 +257,23 @@ fun RecordScreen(app: AppContainer, exerciseId: Int, onBack: () -> Unit, onDone:
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { hasCamera = it }
     LaunchedEffect(Unit) { if (!hasCamera) ask.launch(Manifest.permission.CAMERA) }
     if (!hasCamera) {
-        Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Aplicația are nevoie de cameră ca să urmărească mișcarea. Imaginile nu pleacă de pe telefon: " +
-                "la server ajung doar punctele corpului.")
-            Button(onClick = { ask.launch(Manifest.permission.CAMERA) }) { Text("Permite camera") }
-            OutlinedButton(onClick = onBack) { Text("Înapoi") }
+        Column(
+            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            IconBubble(Icons.Rounded.Videocam, size = 96.dp)
+            Text("Avem nevoie de cameră", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+            Text("Camera urmărește mișcarea ta. Imaginile nu pleacă de pe telefon: la server ajung doar punctele corpului.",
+                style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+            PrimaryButton("Permite camera", onClick = { ask.launch(Manifest.permission.CAMERA) }, icon = Icons.Rounded.Videocam)
+            SecondaryButton("Înapoi", onClick = onBack, modifier = Modifier.fillMaxWidth())
         }
         return
     }
 
     val exercise = Exercises.byId(exerciseId)
-    val controller = remember { RecordController(context.applicationContext, exercise) }
+    val controller = remember { RecordController(context.applicationContext, exercise, app.voice) }
     DisposableEffect(Unit) { onDispose { controller.close() } }
     val scope = rememberCoroutineScope()
 
@@ -381,33 +408,67 @@ private fun LivePanel(controller: RecordController) {
 
 @Composable
 private fun Controls(controller: RecordController, onBack: () -> Unit, onStop: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        val light = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+    val light = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+    val outline = BorderStroke(1.dp, Color.White.copy(alpha = 0.7f))
+    val shape = MaterialTheme.shapes.medium
+    val tall = Modifier.heightIn(min = 60.dp)
+    val big = MaterialTheme.typography.labelLarge.copy(fontSize = 18.sp)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when (controller.phase) {
             Phase.Preview -> {
-                OutlinedButton(onClick = onBack, colors = light) { Text("Înapoi") }
-                OutlinedButton(onClick = { controller.useFront = !controller.useFront }, colors = light) {
-                    Text(if (controller.useFront) "Camera spate" else "Camera față")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ToolButton(Icons.Rounded.Cameraswitch, if (controller.useFront) "Camera spate" else "Camera față", Modifier.weight(1f)) {
+                        controller.useFront = !controller.useFront
+                    }
+                    ToolButton(Icons.Rounded.Flip, "Oglindă: " + if (controller.mirrored) "da" else "nu", Modifier.weight(1f)) {
+                        controller.mirrored = !controller.mirrored
+                    }
                 }
-                OutlinedButton(onClick = { controller.mirrored = !controller.mirrored }, colors = light) {
-                    Text("Oglindă: " + if (controller.mirrored) "da" else "nu")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = onBack, modifier = tall, colors = light, border = outline, shape = shape) { Text("Înapoi", style = big) }
+                    Button(onClick = controller::start, modifier = tall.weight(1f), shape = shape) {
+                        Icon(Icons.Rounded.PlayArrow, null, Modifier.size(28.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Start", style = big)
+                    }
                 }
-                Box(Modifier.weight(1f))
-                Button(onClick = controller::start) { Text("Start") }
             }
-            Phase.Recording -> {
-                OutlinedButton(onClick = controller::cancel, colors = light) { Text("Renunță") }
-                Box(Modifier.weight(1f))
-                Button(onClick = onStop, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))) {
-                    Text("Stop și trimite")
+            Phase.Recording -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = controller::cancel, modifier = tall, colors = light, border = outline, shape = shape) {
+                    Text("Renunță", style = big)
+                }
+                Button(onClick = onStop, modifier = tall.weight(1f), shape = shape,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828), contentColor = Color.White)) {
+                    Icon(Icons.Rounded.Stop, null, Modifier.size(28.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Gata, trimite", style = big)
                 }
             }
             Phase.Uploading -> {}
-            Phase.Failed -> {
-                OutlinedButton(onClick = controller::cancel, colors = light) { Text("Renunță") }
-                Box(Modifier.weight(1f))
-                Button(onClick = onStop) { Text("Retrimite") }
+            Phase.Failed -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = controller::cancel, modifier = tall, colors = light, border = outline, shape = shape) {
+                    Text("Renunță", style = big)
+                }
+                Button(onClick = onStop, modifier = tall.weight(1f), shape = shape) {
+                    Icon(Icons.Rounded.Refresh, null, Modifier.size(26.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Retrimite", style = big)
+                }
             }
+        }
+    }
+}
+
+/** Buton mic de reglaj peste imaginea camerei (camera, oglinda). */
+@Composable
+private fun ToolButton(icon: ImageVector, text: String, modifier: Modifier, onClick: () -> Unit) {
+    Surface(onClick = onClick, modifier = modifier.heightIn(min = 52.dp), shape = CircleShape, color = Color(0x99000000),
+        contentColor = Color.White, border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f))) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center) {
+            Icon(icon, null, Modifier.size(22.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
 }

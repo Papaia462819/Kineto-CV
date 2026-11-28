@@ -87,11 +87,16 @@ def _cv(values):
     return float(values.std() / abs(values.mean()))
 
 
+def _find_reps(angles, exercise, fps):
+    """Unghiul principal și repetările lui: aceleași pentru rezumat și pentru măsurile pe repetare."""
+    primary = angles[PRIMARY_ANGLE[exercise]].to_numpy(dtype=float)
+    return primary, find_reps(primary, fps, prominence=REP_PROMINENCE[exercise])
+
+
 def repetition_summary(angles, exercise, fps=30.0):
     """Rezumă repetările unei execuții: cât de mult, cât de constant, în ce ritm, cu ce compensări."""
     row = dict.fromkeys(REPETITION_NAMES, np.nan)
-    primary = angles[PRIMARY_ANGLE[exercise]].to_numpy(dtype=float)
-    reps = find_reps(primary, fps, prominence=REP_PROMINENCE[exercise])
+    primary, reps = _find_reps(angles, exercise, fps)
     row["rep__count"] = len(reps)
     if not reps:
         return row
@@ -116,3 +121,22 @@ def repetition_summary(angles, exercise, fps=30.0):
         if exercise in SYMMETRY_PAIR:
             row["rep__asymmetry"] = float(np.nanmean(table["asymmetry"]))
     return row
+
+
+# Măsurile fiecărei repetări, pentru graficul din aplicație (rezumatul de mai sus păstrează doar mediile lor).
+REPETITION_DETAILS = ["rom", "up_s", "down_s", "jerk", "compensation", "asymmetry"]
+
+
+def repetition_details(angles, exercise, fps=30.0):
+    """Un dicționar pe repetare, în ordine: amplitudinea (grade), urcarea și coborârea (s), netezimea
+    (jerk normalizat, mai mic = mai lin), compensarea și asimetria (grade; asimetria doar unde există perechea).
+    Repetările sunt aceleași ca în rezumat. Valorile lipsă sunt None, ca JSON-ul să rămână valid."""
+    _, reps = _find_reps(angles, exercise, fps)
+    if not reps:
+        return []
+    table = repetition_table(angles, reps, exercise, fps)
+    table["rom"] = [r.amplitude for r in reps]  # ca în rezumat (rep__rom_mean): vârf minus vale
+    if "asymmetry" not in table:
+        table["asymmetry"] = np.nan
+    return [{key: round(float(value), 2) if np.isfinite(value) else None for key, value in row.items()}
+            for row in table[REPETITION_DETAILS].to_dict("records")]

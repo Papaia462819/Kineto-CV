@@ -7,6 +7,9 @@ import src.api as api
 from src.session import ExecutionResult
 
 
+REP_DETAILS = [{"rom": 82.0, "up_s": 1.5, "down_s": 1.4, "jerk": 40.0, "compensation": 3.0, "asymmetry": None}] * 3
+
+
 class FakeAnalyzer:
     score_error = 6.0
 
@@ -16,7 +19,7 @@ class FakeAnalyzer:
     def analyze(self, image_kp, world_kp, times, exercise, mirrored=False):
         self.calls.append((image_kp, world_kp, times, exercise, mirrored))
         return ExecutionResult(exercise, float(times[-1] - times[0]), 0.9, 2.0, 3, 80.0, 0.95, 41.5, 6.0, exercise,
-                               0.9, [])
+                               0.9, [], rep_details=REP_DETAILS)
 
 
 @pytest.fixture
@@ -60,6 +63,7 @@ def test_upload_analyzes_and_stores_session(client):
     session = client.post(f"/api/patients/{pid}/sessions", json=body).json()
     assert session["score"] == 41.5 and session["reps"] == 3 and session["warnings"] == []
     assert session["feedback"] == {"Ține coatele întinse.": 2}
+    assert session["rep_details"] == REP_DETAILS
     image_kp, _, times, exercise, mirrored = client.fake.calls[0]
     assert image_kp.shape == (3, 33, 4) and np.isnan(image_kp[1]).all() and not np.isnan(image_kp[0]).any()
     assert list(times) == [0.0, 0.04, 0.08] and exercise == 1 and mirrored is False
@@ -87,3 +91,21 @@ def test_review_and_messages(client):
     assert [m["text"] for m in messages] == ["Salut", "Mersi"]
     assert client.post(f"/api/patients/{pid}/messages",
                        json={"author_role": "admin", "author_name": "x", "text": "y"}).status_code == 422
+
+
+def test_old_database_gets_the_new_columns(tmp_path):
+    import sqlite3
+    from src.storage import Storage
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)  # o bază de dinainte de feedback și de măsurile pe repetare
+    old.execute("CREATE TABLE sessions (id INTEGER PRIMARY KEY, patient_id INTEGER, created TEXT, exercise INTEGER, "
+                "device TEXT, duration_s REAL, kept REAL, valid_s REAL, reps INTEGER, rom_mean REAL, rom_fatigue REAL, "
+                "score REAL, score_error REAL, looks_like INTEGER, looks_like_p REAL, warnings TEXT NOT NULL DEFAULT '[]', "
+                "keypoints_path TEXT, review_text TEXT, review_author TEXT, review_created TEXT)")
+    old.execute("INSERT INTO sessions (patient_id, created, exercise) VALUES (1, '2026-11-01T18:00:00', 1)")
+    old.commit()
+    old.close()
+    storage = Storage(path)
+    session = storage.session(1)
+    storage.close()
+    assert session["feedback"] == {} and session["rep_details"] == []

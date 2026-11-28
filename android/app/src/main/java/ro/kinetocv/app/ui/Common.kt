@@ -1,117 +1,85 @@
 package ro.kinetocv.app.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.CancellationException
-import ro.kinetocv.app.data.userMessage
+import ro.kinetocv.app.ui.theme.LocalStatusColors
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
-
-val Teal = Color(0xFF00796B)
-val Good = Color(0xFF2E7D32)
-val Medium = Color(0xFFF9A825)
-val Weak = Color(0xFFC62828)
-
-@Composable
-fun KinetoTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = lightColorScheme(primary = Teal, secondary = Color(0xFF455A64), tertiary = Color(0xFF5D4037)),
-        content = content,
-    )
-}
-
-/** Starea unei încărcări de pe server. */
-sealed interface Load<out T> {
-    data object Loading : Load<Nothing>
-    data class Ok<T>(val value: T) : Load<T>
-    data class Failed(val message: String) : Load<Nothing>
-}
-
-/** Încarcă ceva de pe server când ecranul apare; întoarce starea și o funcție de reîncărcare. */
-@Composable
-fun <T> rememberLoad(key: Any?, block: suspend () -> T): Pair<Load<T>, () -> Unit> {
-    var version by remember { mutableIntStateOf(0) }
-    var state by remember(key) { mutableStateOf<Load<T>>(Load.Loading) }
-    LaunchedEffect(key, version) {
-        state = try {
-            Load.Ok(block())
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Load.Failed(e.userMessage())
-        }
-    }
-    return state to { version++ }
-}
 
 private val romanian: Locale = Locale.forLanguageTag("ro")
 
-/** "2026-11-18T18:00:00" → "18 nov. 2026, 18:00" */
-fun formatDate(iso: String): String = runCatching {
-    LocalDateTime.parse(iso).format(DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", romanian))
-}.getOrDefault(iso)
+private fun String.capitalized() = replaceFirstChar { it.titlecase(romanian) }
 
-fun scoreColor(score: Double?) = when {
-    score == null -> Color.Gray
-    score >= 40 -> Good
-    score >= 30 -> Medium
-    else -> Weak
-}
+private fun parse(iso: String): LocalDateTime? = runCatching { LocalDateTime.parse(iso) }.getOrNull()
 
-@Composable
-fun ScoreBadge(score: Double?, size: Int = 52) {
-    Box(
-        Modifier.size(size.dp).background(scoreColor(score), CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(score?.let { "%.0f".format(it) } ?: "–", color = Color.White, fontWeight = FontWeight.Bold, fontSize = (size / 2.6).sp)
+/** "Azi", "Ieri", "Acum 3 zile", altfel "18 noiembrie". */
+fun relativeDay(iso: String): String {
+    val date = parse(iso)?.toLocalDate() ?: return iso
+    return when (val days = ChronoUnit.DAYS.between(date, LocalDate.now())) {
+        0L -> "Azi"
+        1L -> "Ieri"
+        in 2..6 -> "Acum $days zile"
+        else -> date.format(DateTimeFormatter.ofPattern("d MMMM", romanian))
     }
 }
 
-@Composable
-fun LoadingRow() {
-    Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator() }
+/** "Azi, 18:00" sau "18 noiembrie, 18:00". */
+fun relativeDayTime(iso: String): String {
+    val time = parse(iso) ?: return iso
+    return relativeDay(iso) + ", " + time.format(DateTimeFormatter.ofPattern("HH:mm"))
 }
 
+/** "Luni, 23 noiembrie" */
+fun longDate(date: LocalDate): String = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", romanian)).capitalized()
+
+/** "Joi, 26 nov. · 10:00" */
+fun appointmentDate(time: LocalDateTime): String =
+    time.format(DateTimeFormatter.ofPattern("EEEE, d MMMM · HH:mm", romanian)).capitalized()
+
+/** Prima literă a zilei săptămânii: L, M, M, J, V, S, D. */
+fun dayLetter(date: LocalDate): String = date.format(DateTimeFormatter.ofPattern("EEEEE", romanian)).uppercase(romanian)
+
+fun dayName(date: LocalDate): String = date.format(DateTimeFormatter.ofPattern("EEEE", romanian))
+
+fun timeOfDayGreeting(): String = when (LocalDateTime.now().hour) {
+    in 5..11 -> "Bună dimineața"
+    in 12..17 -> "Bună ziua"
+    else -> "Bună seara"
+}
+
+/** Nivelul unui scor (0–50), cu pragurile din KIMORE: 40 bine, 30 acceptabil. */
+enum class Level(val label: String) {
+    Good("Bine"),
+    Medium("Acceptabil"),
+    Weak("De îmbunătățit"),
+    Unknown("Fără scor"),
+}
+
+// Pe scorul rotunjit, cum îl vede pacientul: 39,5 apare „40”, deci trebuie să fie și „Bine”.
+fun levelOf(score: Double?) = when {
+    score == null -> Level.Unknown
+    Math.round(score) >= 40 -> Level.Good
+    Math.round(score) >= 30 -> Level.Medium
+    else -> Level.Weak
+}
+
+/** Culoarea principală, fundalul și textul pe fundal pentru un nivel. */
+data class LevelColors(val main: Color, val container: Color, val onContainer: Color)
+
 @Composable
-fun ErrorCard(message: String, onRetry: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
-            TextButton(onClick = onRetry) { Text("Încearcă din nou") }
-        }
+@ReadOnlyComposable
+fun levelColors(level: Level): LevelColors {
+    val s = LocalStatusColors.current
+    return when (level) {
+        Level.Good -> LevelColors(s.good, s.goodContainer, s.onGoodContainer)
+        Level.Medium -> LevelColors(s.medium, s.mediumContainer, s.onMediumContainer)
+        Level.Weak -> LevelColors(s.weak, s.weakContainer, s.onWeakContainer)
+        Level.Unknown -> LevelColors(Color.Gray, Color.Gray.copy(alpha = 0.2f), Color.DarkGray)
     }
 }
 
-@Composable
-fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-}
+fun formatScore(score: Double?) = score?.let { "%.0f".format(it) } ?: "–"
